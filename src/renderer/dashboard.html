@@ -104,6 +104,34 @@
     padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font)}
   .btn:disabled{opacity:.5;cursor:default}
   .hint{color:var(--faint);font-size:12px;line-height:1.6}
+  /* daily habits */
+  .datenav{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text)}
+  .datenav button{width:22px;height:22px;border:none;background:transparent;color:var(--muted);border-radius:6px;cursor:pointer}
+  .datenav button:hover{background:rgba(255,255,255,0.08);color:var(--text)}
+  .datenav button:disabled{opacity:.3;cursor:default}
+  .datenav .d{min-width:104px;text-align:center;font-variant-numeric:tabular-nums}
+  .datenav .today{color:var(--accent);font-size:9px;border:1px solid var(--accent-dim);border-radius:4px;padding:1px 5px}
+  .hrow{display:flex;align-items:center;gap:12px;padding:11px 4px;border-bottom:1px solid rgba(255,255,255,0.04)}
+  .hrow:last-child{border-bottom:none}
+  .hrow .chk{width:20px;height:20px;border-radius:6px;border:1.5px solid var(--faint);cursor:pointer;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;transition:all .13s}
+  .hrow .chk:hover{border-color:var(--muted)}
+  .hrow .chk.on{background:var(--accent);border-color:var(--accent)}
+  .hrow .chk.on::after{content:"";width:5px;height:9px;border:solid #0f1114;border-width:0 2px 2px 0;transform:rotate(45deg);margin-bottom:2px}
+  .hname{flex:1;font-size:14px}
+  .hrow.done .hname{color:var(--muted)}
+  .notebtn{border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:8px;width:30px;height:28px;cursor:pointer;font-size:14px;position:relative}
+  .notebtn:hover{border-color:var(--accent);color:var(--accent)}
+  .notebtn.has{color:var(--accent);border-color:var(--accent-dim)}
+  .notebtn.has::after{content:"";position:absolute;top:-3px;right:-3px;width:7px;height:7px;border-radius:50%;background:var(--accent);border:1.5px solid var(--card)}
+  .ovl{position:fixed;inset:0;background:rgba(8,9,12,0.55);display:none;align-items:center;justify-content:center;z-index:20}
+  .ovl.show{display:flex}
+  .ovl .box{width:440px;max-width:92vw;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 24px 70px rgba(0,0,0,0.55);overflow:hidden}
+  .ovl .otop{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--line)}
+  .ovl .otop .t{font-size:14px;font-weight:600}
+  .ovl .otop .dt{font-size:11px;color:var(--muted);margin-left:auto;font-variant-numeric:tabular-nums}
+  .ovl textarea{width:100%;min-height:150px;background:transparent;border:none;color:var(--text);font-family:var(--font);font-size:14px;line-height:1.6;padding:14px 16px;outline:none;resize:vertical}
+  .ovl .ofoot{display:flex;gap:8px;justify-content:flex-end;padding:10px 14px;border-top:1px solid var(--line)}
+  .ovl .btn.pri{border-color:var(--accent);background:var(--accent-dim);color:var(--accent);font-weight:600}
   /* motivation */
   .reels{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
   .reel{position:relative;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#000}
@@ -136,6 +164,19 @@
   </div>
 
   <div class="kpis" id="kpis"></div>
+
+  <div class="card">
+    <h2>DAILY
+      <span class="spacer"></span>
+      <div class="datenav">
+        <button id="hPrev">‹</button>
+        <span class="d" id="hDateLbl">—</span>
+        <span class="today" id="hTodayTag">today</span>
+        <button id="hNext">›</button>
+      </div>
+    </h2>
+    <div id="habitRows"></div>
+  </div>
 
   <div class="card">
     <h2>CATEGORY GOALS — HOURS TOWARD 10 · 24 · 50 · 100</h2>
@@ -204,6 +245,17 @@
     <h2>MOTIVATION — NOTES<span class="spacer"></span><button class="btn" id="addNote" style="padding:5px 12px;font-size:12px">+ Note</button></h2>
     <div id="notes"></div>
     <div class="mempty" id="notesEmpty" style="display:none">No notes yet — add one to get started.</div>
+  </div>
+
+  <div class="ovl" id="hOvl">
+    <div class="box">
+      <div class="otop"><span class="t" id="hOvlTitle">Note</span><span class="dt" id="hOvlDate"></span></div>
+      <textarea id="hOvlText" placeholder="Write today's note for this habit…"></textarea>
+      <div class="ofoot">
+        <button class="btn" id="hOvlCancel">Cancel</button>
+        <button class="btn pri" id="hOvlSave">Save</button>
+      </div>
+    </div>
   </div>
 
   <script src="dashboard.js"></script>

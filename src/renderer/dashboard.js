@@ -91,6 +91,9 @@ el('backBtn').onclick = () => window.tg.openTracker();
   // ---- consistency heatmap ----
   renderHeat(all);
 
+  // ---- daily habits ----
+  await initHabits();
+
   // ---- tasks ----
   const tasks = await window.tg.getTasks();
   initTasks(tasks);
@@ -98,6 +101,66 @@ el('backBtn').onclick = () => window.tg.openTracker();
   // ---- motivation (reels + notes) ----
   await initMotivation();
 })();
+
+const HABIT_ITEMS = [
+  { id: 'chatgpt', label: 'ChatGPT — Discussion on certain topic' },
+  { id: 'sysdesign', label: 'System Design' },
+  { id: 'deconstruct', label: 'Deconstruct a company' },
+  { id: 'gym', label: 'Gym' },
+];
+
+async function initHabits() {
+  const todayMid = new Date(); todayMid.setHours(0, 0, 0, 0);
+  let viewDate = new Date(todayMid);
+  const isToday = () => viewDate.getTime() === todayMid.getTime();
+  let data = { checks: {}, notes: {} };
+  let editing = null;
+
+  const rows = el('habitRows');
+  const ovl = el('hOvl');
+
+  async function loadDay() { data = await window.tg.getHabits(keyOf(viewDate)); }
+  function persist() { window.tg.setHabits(keyOf(viewDate), data); }
+
+  function render() {
+    el('hDateLbl').textContent = viewDate.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+    el('hTodayTag').style.display = isToday() ? '' : 'none';
+    el('hNext').disabled = isToday();
+    rows.innerHTML = HABIT_ITEMS.map(it => {
+      const on = !!data.checks[it.id];
+      const note = (data.notes[it.id] || '').trim();
+      return `<div class="hrow ${on ? 'done' : ''}">
+        <span class="chk ${on ? 'on' : ''}" data-id="${it.id}"></span>
+        <span class="hname">${escapeHtml(it.label)}</span>
+        <button class="notebtn ${note ? 'has' : ''}" data-note="${it.id}" title="${note ? 'Edit note' : 'Add note'}">📝</button>
+      </div>`;
+    }).join('');
+    rows.querySelectorAll('.chk').forEach(c => c.onclick = () => {
+      data.checks[c.dataset.id] = !data.checks[c.dataset.id]; persist(); render();
+    });
+    rows.querySelectorAll('[data-note]').forEach(b => b.onclick = () => openNote(b.dataset.note));
+  }
+
+  function openNote(id) {
+    editing = id;
+    const it = HABIT_ITEMS.find(x => x.id === id);
+    el('hOvlTitle').textContent = it.label;
+    el('hOvlDate').textContent = keyOf(viewDate);
+    el('hOvlText').value = data.notes[id] || '';
+    ovl.classList.add('show');
+    setTimeout(() => el('hOvlText').focus(), 0);
+  }
+  function closeNote() { ovl.classList.remove('show'); editing = null; }
+  el('hOvlCancel').onclick = closeNote;
+  el('hOvlSave').onclick = () => { if (editing) { data.notes[editing] = el('hOvlText').value; persist(); render(); } closeNote(); };
+  ovl.onclick = e => { if (e.target === ovl) closeNote(); };
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && editing) closeNote(); });
+
+  el('hPrev').onclick = async () => { viewDate.setDate(viewDate.getDate() - 1); await loadDay(); render(); };
+  el('hNext').onclick = async () => { if (isToday()) return; viewDate.setDate(viewDate.getDate() + 1); await loadDay(); render(); };
+
+  await loadDay(); render();
+}
 
 async function initMotivation() {
   const m = await window.tg.getMotivation();
@@ -343,7 +406,7 @@ function initTasks(loaded) {
         <td class="o">${daysBetween(t.start, t.doneAt)}d</td>
       </tr>`).join('');
 
-    document.querySelectorAll('.chk').forEach(c => {
+    document.querySelectorAll('#activeRows .chk, #completedRows .chk').forEach(c => {
       c.onclick = () => {
         const t = tasks.find(x => x.id === c.dataset.id); if (!t) return;
         t.done = !t.done; t.doneAt = t.done ? Date.now() : null; saveTasks(); render();

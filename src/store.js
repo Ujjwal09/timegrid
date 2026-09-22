@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 let filePath;
-let cache = { days: {}, plans: {}, catMap: {}, settings: { target: 8 }, tasks: [], motivation: { reels: [], notes: [] } };
+let cache = { days: {}, plans: {}, catMap: {}, settings: { target: 8 }, tasks: [], motivation: { reels: [], notes: [] }, habits: {} };
 
 // Back-compat: older days stored as arrays of slot indexes.
 function normalizeDay(v) {
@@ -32,6 +32,7 @@ function init(userDataDir) {
         reels: Array.isArray(raw.motivation && raw.motivation.reels) ? raw.motivation.reels : [],
         notes: Array.isArray(raw.motivation && raw.motivation.notes) ? raw.motivation.notes : [],
       };
+      cache.habits = (raw.habits && typeof raw.habits === 'object') ? raw.habits : {};
     } else if (raw) {
       // old flat format: every key is a date
       for (const k of Object.keys(raw)) cache.days[k] = normalizeDay(raw[k]);
@@ -107,4 +108,18 @@ function setNotes(notes) {
   flush();
 }
 
-module.exports = { init, getDay, setDay, getAll, getPlan, setPlan, getCatMap, setCatMap, getSettings, setSetting, getTasks, setTasks, getMotivation, setReels, setNotes };
+// Daily habits per day: { checks: { id: bool }, notes: { id: text } }
+function getHabits(dateKey) {
+  return cache.habits[dateKey] || { checks: {}, notes: {} };
+}
+function setHabits(dateKey, data) {
+  const checks = (data && data.checks) || {};
+  const notes = (data && data.notes) || {};
+  const anyCheck = Object.values(checks).some(Boolean);
+  const anyNote = Object.values(notes).some(t => (t || '').trim());
+  if (anyCheck || anyNote) cache.habits[dateKey] = { checks, notes };
+  else delete cache.habits[dateKey];
+  flush();
+}
+
+module.exports = { init, getDay, setDay, getAll, getPlan, setPlan, getCatMap, setCatMap, getSettings, setSetting, getTasks, setTasks, getMotivation, setReels, setNotes, getHabits, setHabits };

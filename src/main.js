@@ -77,6 +77,41 @@ ipcMain.handle('catmap:set', (_e, map) => { store.setCatMap(map); return true; }
 ipcMain.handle('motivation:get', () => store.getMotivation());
 ipcMain.handle('reels:set', (_e, reels) => { store.setReels(reels); return true; });
 ipcMain.handle('notes:set', (_e, notes) => { store.setNotes(notes); return true; });
+ipcMain.handle('habits:get', (_e, dateKey) => store.getHabits(dateKey));
+ipcMain.handle('habits:set', (_e, dateKey, data) => { store.setHabits(dateKey, data); writeHabitsFile(dateKey, data); return true; });
+
+// ---- Daily habits: also write a human-readable text file per day (for use outside the app) ----
+const HABIT_ITEMS = [
+  { id: 'chatgpt', label: 'ChatGPT — Discussion on certain topic' },
+  { id: 'sysdesign', label: 'System Design' },
+  { id: 'deconstruct', label: 'Deconstruct a company' },
+  { id: 'gym', label: 'Gym' },
+];
+function buildHabitsText(dateKey, data) {
+  const checks = (data && data.checks) || {};
+  const notes = (data && data.notes) || {};
+  let out = `TimeGrid — Daily — ${dateKey}\n\n`;
+  HABIT_ITEMS.forEach(it => {
+    out += `[${checks[it.id] ? 'x' : ' '}] ${it.label}\n`;
+    const note = (notes[it.id] || '').trim();
+    if (note) out += note.split('\n').map(l => '    ' + l).join('\n') + '\n';
+    out += '\n';
+  });
+  return out.trimEnd() + '\n';
+}
+function writeHabitsFile(dateKey, data) {
+  const fs = require('fs');
+  const dir = path.join(app.getPath('userData'), 'notes');
+  const file = path.join(dir, `${dateKey}.txt`);
+  const checks = (data && data.checks) || {};
+  const notes = (data && data.notes) || {};
+  const empty = !Object.values(checks).some(Boolean) && !Object.values(notes).some(t => (t || '').trim());
+  try {
+    if (empty) { fs.rmSync(file, { force: true }); return; }
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(file, buildHabitsText(dateKey, data), 'utf8');
+  } catch { /* non-fatal: JSON store is the source of truth */ }
+}
 
 // ---- IPC: window controls ----
 ipcMain.on('win:minimize', () => panel && panel.minimize());

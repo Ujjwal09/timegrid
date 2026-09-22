@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TimeGrid — Daily Habits preview</title>
+<style>
+  :root{
+    --bg:#14151a;--card:#1c1e25;--line:rgba(255,255,255,0.07);
+    --text:#e7e8ec;--muted:#8b8d98;--faint:#4a4c57;--accent:#5eead4;--accent-dim:rgba(94,234,212,0.16);
+    --font:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--font);background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;padding:28px 32px;max-width:760px;margin:0 auto}
+  h1{font-size:18px;font-weight:600;letter-spacing:.3px;margin-bottom:2px}
+  .sub{color:var(--muted);font-size:12px;margin-bottom:20px}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:18px}
+  .card h2{font-size:13px;font-weight:600;color:var(--muted);letter-spacing:.3px;margin-bottom:14px;display:flex;align-items:center;gap:10px}
+  .card h2 .spacer{flex:1}
+  .datenav{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text)}
+  .datenav button{width:22px;height:22px;border:none;background:transparent;color:var(--muted);border-radius:6px;cursor:pointer}
+  .datenav button:hover{background:rgba(255,255,255,0.08);color:var(--text)}
+  .datenav button:disabled{opacity:.3;cursor:default}
+  .datenav .d{min-width:104px;text-align:center;font-variant-numeric:tabular-nums}
+  .datenav .today{color:var(--accent);font-size:9px;border:1px solid var(--accent-dim);border-radius:4px;padding:1px 5px}
+
+  .hrow{display:flex;align-items:center;gap:12px;padding:11px 4px;border-bottom:1px solid rgba(255,255,255,0.04)}
+  .hrow:last-child{border-bottom:none}
+  .chk{width:20px;height:20px;border-radius:6px;border:1.5px solid var(--faint);cursor:pointer;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;transition:all .13s}
+  .chk:hover{border-color:var(--muted)}
+  .chk.on{background:var(--accent);border-color:var(--accent)}
+  .chk.on::after{content:"";width:5px;height:9px;border:solid #0f1114;border-width:0 2px 2px 0;transform:rotate(45deg);margin-bottom:2px}
+  .hname{flex:1;font-size:14px}
+  .hrow.done .hname{color:var(--muted)}
+  .notebtn{border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:8px;width:30px;height:28px;cursor:pointer;font-size:14px;position:relative}
+  .notebtn:hover{border-color:var(--accent);color:var(--accent)}
+  .notebtn.has{color:var(--accent);border-color:var(--accent-dim)}
+  .notebtn.has::after{content:"";position:absolute;top:-3px;right:-3px;width:7px;height:7px;border-radius:50%;background:var(--accent);border:1.5px solid var(--card)}
+
+  /* note overlay */
+  .ovl{position:fixed;inset:0;background:rgba(8,9,12,0.55);display:none;align-items:center;justify-content:center;z-index:20}
+  .ovl.show{display:flex}
+  .ovl .box{width:440px;max-width:92vw;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 24px 70px rgba(0,0,0,0.55);overflow:hidden}
+  .ovl .top{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--line)}
+  .ovl .top .t{font-size:14px;font-weight:600}
+  .ovl .top .dt{font-size:11px;color:var(--muted);margin-left:auto;font-variant-numeric:tabular-nums}
+  .ovl textarea{width:100%;min-height:150px;background:transparent;border:none;color:var(--text);font-family:var(--font);font-size:14px;line-height:1.6;padding:14px 16px;outline:none;resize:vertical}
+  .ovl .foot{display:flex;gap:8px;justify-content:flex-end;padding:10px 14px;border-top:1px solid var(--line)}
+  .btn{border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:8px;padding:6px 14px;font-size:13px;cursor:pointer;font-family:var(--font)}
+  .btn.pri{border-color:var(--accent);background:var(--accent-dim);color:var(--accent);font-weight:600}
+
+  .previewwrap h2{margin-top:0}
+  pre.preview{background:#0f1013;border:1px solid var(--line);border-radius:10px;padding:14px 16px;font-size:12px;line-height:1.5;color:var(--muted);white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+</style>
+</head>
+<body>
+  <h1>Daily Habits <span style="color:var(--faint);font-weight:400;font-size:13px">(browser preview)</span></h1>
+  <div class="sub">Four daily habits with a checkbox and a per-day note. Stored day-wise (and written to a readable text file — previewed below).</div>
+
+  <div class="card">
+    <h2>DAILY
+      <span class="spacer"></span>
+      <div class="datenav">
+        <button id="prev">‹</button>
+        <span class="d" id="dateLbl">—</span>
+        <span class="today" id="todayTag">today</span>
+        <button id="next">›</button>
+      </div>
+    </h2>
+    <div id="rows"></div>
+  </div>
+
+  <div class="card previewwrap">
+    <h2>TEXT FILE — <span id="fileLbl"></span></h2>
+    <pre class="preview" id="preview"></pre>
+  </div>
+
+  <!-- note overlay -->
+  <div class="ovl" id="ovl">
+    <div class="box">
+      <div class="top"><span class="t" id="ovlTitle">Note</span><span class="dt" id="ovlDate"></span></div>
+      <textarea id="ovlText" placeholder="Write today's note for this habit…"></textarea>
+      <div class="foot">
+        <button class="btn" id="ovlCancel">Cancel</button>
+        <button class="btn pri" id="ovlSave">Save</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const ITEMS = [
+    { id:'chatgpt',    label:'ChatGPT — Discussion on certain topic' },
+    { id:'sysdesign',  label:'System Design' },
+    { id:'deconstruct',label:'Deconstruct a company' },
+    { id:'gym',        label:'Gym' },
+  ];
+  const pad=n=>String(n).padStart(2,'0');
+  const todayMid=new Date(); todayMid.setHours(0,0,0,0);
+  let viewDate=new Date(todayMid);
+  const keyOf=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const isToday=()=>viewDate.getTime()===todayMid.getTime();
+
+  const store=k=>JSON.parse(localStorage.getItem('tg:proto:habits:'+k)||'{"checks":{},"notes":{}}');
+  const save=(k,v)=>localStorage.setItem('tg:proto:habits:'+k,JSON.stringify(v));
+
+  let data=store(keyOf(viewDate));
+
+  function render(){
+    document.getElementById('dateLbl').textContent=viewDate.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
+    document.getElementById('todayTag').style.display=isToday()?'':'none';
+    document.getElementById('next').disabled=isToday();
+    const host=document.getElementById('rows');
+    host.innerHTML=ITEMS.map(it=>{
+      const on=!!data.checks[it.id];
+      const note=(data.notes[it.id]||'').trim();
+      return `<div class="hrow ${on?'done':''}">
+        <span class="chk ${on?'on':''}" data-id="${it.id}"></span>
+        <span class="hname">${it.label}</span>
+        <button class="notebtn ${note?'has':''}" data-note="${it.id}" title="${note?'Edit note':'Add note'}">📝</button>
+      </div>`;
+    }).join('');
+    host.querySelectorAll('.chk').forEach(c=>c.onclick=()=>{ data.checks[c.dataset.id]=!data.checks[c.dataset.id]; persist(); render(); });
+    host.querySelectorAll('[data-note]').forEach(b=>b.onclick=()=>openNote(b.dataset.note));
+    renderPreview();
+  }
+
+  function renderPreview(){
+    document.getElementById('fileLbl').textContent=keyOf(viewDate)+'.txt';
+    document.getElementById('preview').textContent=buildText();
+  }
+  function buildText(){
+    let out=`TimeGrid — Daily — ${keyOf(viewDate)}\n\n`;
+    ITEMS.forEach(it=>{
+      const on=data.checks[it.id]?'x':' ';
+      out+=`[${on}] ${it.label}\n`;
+      const note=(data.notes[it.id]||'').trim();
+      if(note) out+=note.split('\n').map(l=>'    '+l).join('\n')+'\n';
+      out+='\n';
+    });
+    return out.trimEnd()+'\n';
+  }
+
+  function persist(){ save(keyOf(viewDate),data); }
+
+  // overlay
+  let editing=null;
+  function openNote(id){
+    editing=id;
+    const it=ITEMS.find(x=>x.id===id);
+    document.getElementById('ovlTitle').textContent=it.label;
+    document.getElementById('ovlDate').textContent=keyOf(viewDate);
+    document.getElementById('ovlText').value=data.notes[id]||'';
+    document.getElementById('ovl').classList.add('show');
+    setTimeout(()=>document.getElementById('ovlText').focus(),0);
+  }
+  function closeNote(){ document.getElementById('ovl').classList.remove('show'); editing=null; }
+  document.getElementById('ovlCancel').onclick=closeNote;
+  document.getElementById('ovlSave').onclick=()=>{ if(editing){ data.notes[editing]=document.getElementById('ovlText').value; persist(); render(); } closeNote(); };
+  document.getElementById('ovl').onclick=e=>{ if(e.target.id==='ovl') closeNote(); };
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&editing)closeNote(); });
+
+  document.getElementById('prev').onclick=()=>{ viewDate.setDate(viewDate.getDate()-1); data=store(keyOf(viewDate)); render(); };
+  document.getElementById('next').onclick=()=>{ if(isToday())return; viewDate.setDate(viewDate.getDate()+1); data=store(keyOf(viewDate)); render(); };
+
+  render();
+</script>
+</body>
+</html>

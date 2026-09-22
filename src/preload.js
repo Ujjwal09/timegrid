@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('tg', {
   getMotivation: () => ipcRenderer.invoke('motivation:get'),
   setReels: (reels) => ipcRenderer.invoke('reels:set', reels),
   setNotes: (notes) => ipcRenderer.invoke('notes:set', notes),
+  getHabits: (dateKey) => ipcRenderer.invoke('habits:get', dateKey),
+  setHabits: (dateKey, data) => ipcRenderer.invoke('habits:set', dateKey, data),
   // window
   minimize: () => ipcRenderer.send('win:minimize'),
   close: () => ipcRenderer.send('win:close'),
