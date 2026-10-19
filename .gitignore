@@ -6,3 +6,6 @@ out/
 .env
 .env.*
 CLAUDE.md
+
+# archives
+*.zip

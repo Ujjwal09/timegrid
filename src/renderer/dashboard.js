@@ -26,6 +26,7 @@ const catOf = t => (t ? (catMap[t] || t) : '');   // category of a specific topi
 let goalsView = 'D';
 let goalDates = [];          // Date (midnight) per column, earliest..today
 let goalSeries = [];         // [{ name, color, cum: [] }]
+let goalDayHours = [];       // total hours actually logged each day (all categories), aligned to goalDates
 
 el('backBtn').onclick = () => window.tg.openTracker();
 
@@ -226,6 +227,7 @@ function buildGoalSeries(all, active) {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   goalDates = [];
   for (let t = earliest.getTime(); t <= today.getTime(); t += DAY) goalDates.push(new Date(t));
+  goalDayHours = goalDates.map(d => Object.keys(all[keyOf(d)] || {}).length * 0.5);
 
   goalSeries = [...names].map(name => {
     let acc = 0;
@@ -271,45 +273,94 @@ function renderGoalsBars(all) {
   }).join('');
 }
 
-function weekEndIdx(N) { const a = []; for (let i = 0; i < N; i++) if ((i + 1) % 7 === 0) a.push(i); if (N && a[a.length - 1] !== N - 1) a.push(N - 1); return a; }
-function monthEndIdx(N) { const a = []; for (let i = 0; i < N; i++) { const cur = goalDates[i].getMonth(); const nxt = i < N - 1 ? goalDates[i + 1].getMonth() : null; if (i === N - 1 || cur !== nxt) a.push(i); } return a; }
+// Group days into buckets for the current view. Each bucket carries the day index used
+// for its cumulative value (idx), the day range for its total (from..to), an x-axis label,
+// and whether it gets a marker/label. Buckets are spaced evenly on the x-axis.
+function goalBuckets() {
+  const N = goalDates.length, b = [];
+  if (goalsView === 'D') {
+    for (let i = 0; i < N; i++) b.push({ idx: i, from: i, to: i, label: fmtDate(goalDates[i]), marker: goalDates[i].getDay() === 0 || i === N - 1 });
+    return b;
+  }
+  if (goalsView === 'W') {
+    // Calendar weeks (Mon–Sun): a bucket ends on each Sunday; the final partial week is
+    // labelled by its upcoming Sunday (its calendar week-end), even though it's in the future.
+    let start = 0;
+    for (let i = 0; i < N; i++) {
+      const sun = goalDates[i].getDay() === 0;
+      if (sun || i === N - 1) {
+        let label;
+        if (sun) label = fmtDate(goalDates[i]);
+        else { const d = new Date(goalDates[i]); d.setDate(d.getDate() + ((7 - d.getDay()) % 7)); label = fmtDate(d); }
+        b.push({ idx: i, from: start, to: i, label, marker: true });
+        start = i + 1;
+      }
+    }
+    return b;
+  }
+  // Calendar months
+  let start = 0;
+  for (let i = 0; i < N; i++) {
+    if (i === N - 1 || goalDates[i].getMonth() !== goalDates[i + 1].getMonth()) {
+      b.push({ idx: i, from: start, to: i, label: goalDates[i].toLocaleString('en-GB', { month: 'short' }), marker: true });
+      start = i + 1;
+    }
+  }
+  return b;
+}
 
 function renderGoals() {
   const host = el('goalsChart'), legend = el('goalsLegend');
   const N = goalDates.length;
   if (!N) { host.innerHTML = '<div class="empty">No topics yet — set a topic in the tracker, then tick slots.</div>'; legend.innerHTML = ''; return; }
 
-  const W = 880, H = 280, pl = 34, pr = 48, pt = 18, pb = 24;
+  const W = 880, H = 280, pl = 40, pr = 44, pt = 18, pb = 24;
   const plotW = W - pl - pr, plotH = H - pt - pb;
-  // Adaptive ceiling: step up 10 -> 24 -> 50 -> 100 as the furthest topic climbs.
+  // Adaptive ceiling for the cumulative lines (left axis): 10 -> 24 -> 50 -> 100.
   const maxCum = Math.max(...goalSeries.map(s => s.cum[N - 1]));
   const maxY = GOAL_TIERS.find(t => t >= maxCum) || Math.max(100, Math.ceil(maxCum / 25) * 25);
-  const x = i => pl + (N === 1 ? plotW / 2 : (i / (N - 1)) * plotW);
   const y = v => pt + plotH - (v / maxY) * plotH;
 
-  let vertexIdx, markerIdx;
-  if (goalsView === 'D') { vertexIdx = [...Array(N).keys()]; markerIdx = weekEndIdx(N); }
-  else if (goalsView === 'W') { vertexIdx = weekEndIdx(N); markerIdx = vertexIdx; }
-  else { vertexIdx = monthEndIdx(N); markerIdx = vertexIdx; }
+  const buckets = goalBuckets();
+  const nB = buckets.length;
+  const xk = k => pl + (nB === 1 ? plotW / 2 : (k / (nB - 1)) * plotW);   // even spacing per bucket
+  const cumAt = (s, k) => s.cum[buckets[k].idx];
+
+  // ---- bars: total hours per bucket (across all categories), right axis ----
+  const totals = buckets.map(bk => {
+    let s = 0; for (let d = bk.from; d <= bk.to; d++) s += goalDayHours[d] || 0; return +s.toFixed(1);
+  });
+  const maxBar = Math.max(Math.ceil(Math.max(...totals, 1) / 5) * 5, 5);
+  const yR = v => pt + plotH - (v / maxBar) * plotH;
+  const bw = Math.max(3, (plotW / nB) * 0.6);
+  let bars = '';
+  buckets.forEach((bk, k) => {
+    const v = totals[k]; const h = (v / maxBar) * plotH; const bx = xk(k) - bw / 2; const by = pt + plotH - h;
+    bars += `<rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0, h).toFixed(1)}" rx="2" fill="rgba(255,255,255,0.14)"></rect>`;
+    if (goalsView !== 'D' && v > 0) bars += `<text x="${xk(k).toFixed(1)}" y="${(by - 4).toFixed(1)}" fill="var(--muted)" font-size="9" text-anchor="middle">${v}</text>`;
+  });
+  let raxis = '';
+  [0, 0.5, 1].forEach(f => { const val = Math.round(maxBar * f); raxis += `<text x="${pl + plotW + 6}" y="${(yR(val) + 3).toFixed(1)}" fill="var(--faint)" font-size="10">${val}h</text>`; });
 
   let grid = '';
   GOAL_TIERS.forEach(t => {
     if (t > maxY) return;
     const yy = y(t);
     grid += `<line x1="${pl}" y1="${yy}" x2="${pl + plotW}" y2="${yy}" stroke="rgba(255,255,255,0.09)" stroke-dasharray="3 4"/>`;
-    grid += `<text x="${pl + plotW + 6}" y="${yy + 3}" fill="var(--faint)" font-size="10">${t}h</text>`;
+    grid += `<text x="${pl - 6}" y="${yy + 3}" fill="var(--faint)" font-size="10" text-anchor="end">${t}h</text>`;
   });
   let xlab = '';
-  markerIdx.forEach(i => xlab += `<text x="${x(i)}" y="${H - 6}" fill="var(--faint)" font-size="9" text-anchor="middle">${fmtDate(goalDates[i])}</text>`);
+  buckets.forEach((bk, k) => { if (bk.marker) xlab += `<text x="${xk(k)}" y="${H - 6}" fill="var(--faint)" font-size="9" text-anchor="middle">${bk.label}</text>`; });
 
   let lines = '', dots = '', vlabels = '';
   goalSeries.forEach(s => {
-    const pts = vertexIdx.map(i => `${x(i).toFixed(1)},${y(s.cum[i]).toFixed(1)}`).join(' ');
+    const pts = buckets.map((bk, k) => `${xk(k).toFixed(1)},${y(cumAt(s, k)).toFixed(1)}`).join(' ');
     lines += `<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round"/>`;
-    markerIdx.forEach(i => {
-      const px = x(i), py = y(s.cum[i]);
+    buckets.forEach((bk, k) => {
+      if (!bk.marker) return;
+      const px = xk(k), py = y(cumAt(s, k));
       dots += `<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="3" fill="${s.color}"/>`;
-      vlabels += `<text x="${px.toFixed(1)}" y="${(py - 7).toFixed(1)}" fill="${s.color}" font-size="9" font-weight="600" text-anchor="middle">${(+s.cum[i].toFixed(1))}</text>`;
+      vlabels += `<text x="${px.toFixed(1)}" y="${(py - 7).toFixed(1)}" fill="${s.color}" font-size="9" font-weight="600" text-anchor="middle">${(+cumAt(s, k).toFixed(1))}</text>`;
     });
   });
 
@@ -318,12 +369,13 @@ function renderGoals() {
   const hit = `<rect id="hoverHit" x="${pl}" y="${pt}" width="${plotW}" height="${plotH}" fill="transparent"/>`;
 
   host.style.position = 'relative';
-  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}">${grid}${lines}${dots}${vlabels}${xlab}${guide}${hoverDots}${hit}</svg><div class="charttip" id="charttip" style="display:none"></div>`;
+  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}">${grid}${bars}${lines}${dots}${vlabels}${raxis}${xlab}${guide}${hoverDots}${hit}</svg><div class="charttip" id="charttip" style="display:none"></div>`;
 
+  const bucketWord = goalsView === 'D' ? 'day' : goalsView === 'W' ? 'week' : 'month';
   legend.innerHTML = goalSeries.map(s => {
     const cur = s.cum[N - 1], next = GOAL_TIERS.find(t => cur < t);
     return `<span class="it"><span class="sw" style="background:${s.color}"></span>${escapeHtml(s.name)} · <b>${+cur.toFixed(1)}h</b>${next ? ` → ${next}h` : ' · 100h ✓'}</span>`;
-  }).join('');
+  }).join('') + `<span class="it"><span class="sw" style="background:rgba(255,255,255,0.14)"></span>Total hours / ${bucketWord}</span>`;
 
   // ---- interactivity: hover guide + tooltip ----
   const svg = host.querySelector('svg');
@@ -332,19 +384,19 @@ function renderGoals() {
   const move = e => {
     const rect = svg.getBoundingClientRect();
     const vbX = (e.clientX - rect.left) / rect.width * W;
-    let i = N === 1 ? 0 : Math.round((vbX - pl) / plotW * (N - 1));
-    i = Math.max(0, Math.min(N - 1, i));
-    const gx = x(i);
+    let k = nB === 1 ? 0 : Math.round((vbX - pl) / plotW * (nB - 1));
+    k = Math.max(0, Math.min(nB - 1, k));
+    const gx = xk(k);
     const vbY = (e.clientY - rect.top) / rect.height * H;
 
-    // pick the single nearest topic line at this x
+    // pick the single nearest topic line at this bucket
     let near = 0, best = Infinity;
     goalSeries.forEach((s, si) => {
-      const d = Math.abs(y(s.cum[i]) - vbY);
-      if (d < best) { best = d; near = si; }
+      const dd = Math.abs(y(cumAt(s, k)) - vbY);
+      if (dd < best) { best = dd; near = si; }
     });
     const s = goalSeries[near];
-    const py = y(s.cum[i]);
+    const py = y(cumAt(s, k));
 
     guideEl.setAttribute('x1', gx); guideEl.setAttribute('x2', gx); guideEl.style.display = '';
     goalSeries.forEach((_, si) => {
@@ -353,8 +405,9 @@ function renderGoals() {
       else dot.style.display = 'none';
     });
 
-    tip.innerHTML = `<div class="tdate">${fmtDate(goalDates[i])}</div>` +
-      `<div class="trow"><span class="sw" style="background:${s.color}"></span>${escapeHtml(s.name)}<b>${+s.cum[i].toFixed(1)}h</b></div>`;
+    tip.innerHTML = `<div class="tdate">${buckets[k].label}</div>` +
+      `<div class="trow"><span class="sw" style="background:${s.color}"></span>${escapeHtml(s.name)}<b>${+cumAt(s, k).toFixed(1)}h</b></div>` +
+      `<div class="trow ttot">Total this ${bucketWord}<b>${totals[k]}h</b></div>`;
     tip.style.display = '';
     tip.style.left = (gx / W * rect.width) + 'px';
     tip.style.top = (py / H * rect.height) + 'px';

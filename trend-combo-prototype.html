@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TimeGrid — Goals trend (combo) preview</title>
+<style>
+  :root{
+    --bg:#14151a;--card:#1c1e25;--line:rgba(255,255,255,0.07);
+    --text:#e7e8ec;--muted:#8b8d98;--faint:#4a4c57;--accent:#5eead4;--accent-dim:rgba(94,234,212,0.16);
+    --bar:rgba(255,255,255,0.14);
+    --font:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--font);background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;padding:28px 32px;max-width:960px;margin:0 auto}
+  h1{font-size:18px;font-weight:600;letter-spacing:.3px;margin-bottom:2px}
+  .sub{color:var(--muted);font-size:12px;margin-bottom:20px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:18px}
+  .card h2{font-size:13px;font-weight:600;color:var(--muted);letter-spacing:.3px;margin-bottom:16px;display:flex;align-items:center;gap:10px}
+  .card h2 .spacer{flex:1}
+  .seg{display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+  .seg button{border:none;background:transparent;color:var(--muted);font-size:11px;font-weight:600;padding:4px 10px;cursor:pointer}
+  .seg button.on{background:var(--accent-dim);color:var(--accent)}
+  svg{width:100%;height:auto;display:block;overflow:visible}
+  #chart{position:relative}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:12px}
+  .legend .it{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+  .legend .sw{width:10px;height:10px;border-radius:3px}
+  .legend .it b{color:var(--text);font-variant-numeric:tabular-nums}
+  .legend .bar-key{width:12px;height:10px;border-radius:2px;background:var(--bar)}
+  .charttip{position:absolute;transform:translate(-50%,calc(-100% - 10px));pointer-events:none;background:rgba(10,11,15,0.94);
+    border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;white-space:nowrap;box-shadow:0 8px 24px rgba(0,0,0,0.5);z-index:5;display:none}
+  .charttip .tdate{color:var(--muted);font-size:10px;margin-bottom:5px}
+  .charttip .trow{display:flex;align-items:center;gap:6px;line-height:1.7}
+  .charttip .trow .sw{width:9px;height:9px;border-radius:3px;flex:0 0 auto}
+  .charttip .trow b{margin-left:auto;padding-left:12px;font-variant-numeric:tabular-nums}
+  .charttip .ttot{border-top:1px solid var(--line);margin-top:5px;padding-top:5px;font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+  <h1>Goals trend — combo <span style="color:var(--faint);font-weight:400;font-size:13px">(browser preview)</span></h1>
+  <div class="sub">Cumulative hours per category (lines, left axis) + total hours per bucket across all categories (bars, right axis).</div>
+
+  <div class="card">
+    <h2>GOALS TREND — CUMULATIVE HOURS + TOTAL PER BUCKET
+      <span class="spacer"></span>
+      <div class="seg" id="viewSeg">
+        <button data-v="D" class="on">D</button>
+        <button data-v="W">W</button>
+        <button data-v="M">M</button>
+      </div>
+    </h2>
+    <div id="chart"></div>
+    <div class="legend" id="legend"></div>
+  </div>
+
+<script>
+  const pad=n=>String(n).padStart(2,'0');
+  const fmtDate=t=>{const d=new Date(t);return `${pad(d.getDate())} ${d.toLocaleString('en-GB',{month:'short'})}`;};
+  const GOAL_TIERS=[10,24,50,100];
+
+  function catColor(name){let h=0;for(let i=0;i<name.length;i++)h=(h*31+name.charCodeAt(i))%360;return `hsl(${h} 62% 58%)`;}
+
+  // ---- sample data: daily hours per category over ~9 weeks ----
+  const CATS=['DSA','System Design','ML'];
+  const DAY=86400000;
+  const today=new Date(); today.setHours(0,0,0,0);
+  const N=63;
+  const dates=[...Array(N)].map((_,i)=>new Date(today.getTime()-(N-1-i)*DAY));
+  function seeded(i,c){ // deterministic pseudo-random hours
+    const x=Math.sin((i+1)*(c+2)*12.9898)*43758.5453; const f=x-Math.floor(x);
+    return Math.round(f*6)/2;  // 0..3h in 0.5 steps
+  }
+  const daily=CATS.map((_,c)=>dates.map((_,i)=> (i%7===6? seeded(i,c)*0.3 : seeded(i,c)) )); // lighter weekends
+
+  let view='D';
+
+  // Build buckets for the current view.
+  function buildBuckets(){
+    let groups=[]; // each: {label, idxs:[dayIndexes]}
+    if(view==='D'){
+      groups=dates.map((d,i)=>({label:fmtDate(d),idxs:[i],markerDay:(i%7===6||i===N-1)}));
+    } else if(view==='W'){
+      for(let s=0;s<N;s+=7){ const idxs=[]; for(let i=s;i<Math.min(s+7,N);i++) idxs.push(i);
+        groups.push({label:fmtDate(dates[idxs[idxs.length-1]]),idxs,markerDay:true}); }
+    } else {
+      let cur=null;
+      dates.forEach((d,i)=>{ const key=d.getFullYear()+'-'+d.getMonth();
+        if(!cur||cur.key!==key){ cur={key,label:d.toLocaleString('en-GB',{month:'short'}),idxs:[],markerDay:true}; groups.push(cur);} cur.idxs.push(i); });
+    }
+    // per-bucket total (across cats) and cumulative per cat up to bucket end
+    const acc=CATS.map(()=>0);
+    const totals=[], series=CATS.map((name)=>({name,color:catColor(name),cum:[]}));
+    groups.forEach(g=>{
+      let total=0;
+      CATS.forEach((_,c)=>{ let inc=0; g.idxs.forEach(i=>inc+=daily[c][i]); acc[c]+=inc; total+=inc; series[c].cum.push(+acc[c].toFixed(1)); });
+      totals.push(+total.toFixed(1));
+    });
+    return {groups,totals,series};
+  }
+
+  function render(){
+    const {groups,totals,series}=buildBuckets();
+    const n=groups.length;
+    const W=900,H=320,pl=38,pr=44,pt=18,pb=26;
+    const plotW=W-pl-pr, plotH=H-pt-pb;
+
+    const maxCum=Math.max(...series.map(s=>s.cum[n-1]),1);
+    const maxLeft=GOAL_TIERS.find(t=>t>=maxCum)||Math.ceil(maxCum/25)*25;
+    const maxBar=Math.max(Math.ceil(Math.max(...totals,1)/5)*5,5);
+
+    const x=i=>pl+(n===1?plotW/2:(i/(n-1))*plotW);
+    const yL=v=>pt+plotH-(v/maxLeft)*plotH;      // cumulative (left)
+    const yR=v=>pt+plotH-(v/maxBar)*plotH;       // bucket total (right)
+
+    // which buckets get markers/labels
+    const markerIdx=groups.map((g,i)=>i).filter(i=>groups[i].markerDay);
+
+    // left-axis milestone gridlines
+    let grid='';
+    GOAL_TIERS.forEach(t=>{ if(t>maxLeft)return; const yy=yL(t);
+      grid+=`<line x1="${pl}" y1="${yy}" x2="${pl+plotW}" y2="${yy}" stroke="rgba(255,255,255,0.09)" stroke-dasharray="3 4"/>`;
+      grid+=`<text x="${pl-6}" y="${yy+3}" fill="var(--faint)" font-size="10" text-anchor="end">${t}h</text>`;
+    });
+    // right-axis ticks (bar total)
+    let raxis='';
+    [0,0.5,1].forEach(f=>{ const val=+(maxBar*f).toFixed(0); const yy=yR(val);
+      raxis+=`<text x="${pl+plotW+6}" y="${yy+3}" fill="var(--faint)" font-size="10">${val}h</text>`; });
+
+    // bars (bucket totals, right axis)
+    const bw=Math.max(3,(plotW/n)*0.6);
+    let bars='';
+    totals.forEach((v,i)=>{ const h=(v/maxBar)*plotH; const bx=x(i)-bw/2; const by=pt+plotH-h;
+      bars+=`<rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0,h).toFixed(1)}" rx="2" fill="var(--bar)"></rect>`;
+      if(view!=='D' && v>0) bars+=`<text x="${x(i).toFixed(1)}" y="${(by-4).toFixed(1)}" fill="var(--muted)" font-size="9" text-anchor="middle">${v}</text>`;
+    });
+
+    // lines (cumulative, left axis)
+    let lines='',dots='';
+    series.forEach(s=>{
+      const pts=s.cum.map((v,i)=>`${x(i).toFixed(1)},${yL(v).toFixed(1)}`).join(' ');
+      lines+=`<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round"/>`;
+      markerIdx.forEach(i=>{ dots+=`<circle cx="${x(i).toFixed(1)}" cy="${yL(s.cum[i]).toFixed(1)}" r="3" fill="${s.color}"/>`; });
+    });
+
+    // x labels at markers
+    let xlab='';
+    markerIdx.forEach(i=> xlab+=`<text x="${x(i).toFixed(1)}" y="${H-6}" fill="var(--faint)" font-size="9" text-anchor="middle">${groups[i].label}</text>`);
+
+    const host=document.getElementById('chart');
+    host.innerHTML=`<svg viewBox="0 0 ${W} ${H}">${grid}${bars}${lines}${dots}${raxis}${xlab}
+      <line id="guide" x1="0" x2="0" y1="${pt}" y2="${pt+plotH}" stroke="rgba(255,255,255,0.28)" stroke-width="1" style="display:none"/>
+      <rect id="hit" x="${pl}" y="${pt}" width="${plotW}" height="${plotH}" fill="transparent"/>
+    </svg><div class="charttip" id="tip"></div>`;
+
+    document.getElementById('legend').innerHTML =
+      series.map(s=>{const cur=s.cum[n-1],next=GOAL_TIERS.find(t=>cur<t);
+        return `<span class="it"><span class="sw" style="background:${s.color}"></span>${s.name} · <b>${cur}h</b>${next?` → ${next}h`:' ✓'}</span>`;}).join('')
+      + `<span class="it"><span class="bar-key"></span>Total hours per ${view==='D'?'day':view==='W'?'week':'month'}</span>`;
+
+    // hover
+    const svg=host.querySelector('svg'), tip=document.getElementById('tip'), guide=svg.querySelector('#guide');
+    svg.addEventListener('mousemove',e=>{
+      const r=svg.getBoundingClientRect(); const vbX=(e.clientX-r.left)/r.width*W;
+      let i=n===1?0:Math.round((vbX-pl)/plotW*(n-1)); i=Math.max(0,Math.min(n-1,i));
+      const gx=x(i); guide.setAttribute('x1',gx); guide.setAttribute('x2',gx); guide.style.display='';
+      tip.innerHTML=`<div class="tdate">${groups[i].label}</div>`+
+        series.map(s=>`<div class="trow"><span class="sw" style="background:${s.color}"></span>${s.name}<b>${s.cum[i]}h</b></div>`).join('')+
+        `<div class="trow ttot">Total this ${view==='D'?'day':view==='W'?'week':'month'}<b>${totals[i]}h</b></div>`;
+      tip.style.display=''; tip.style.left=(gx/W*r.width)+'px'; tip.style.top=(yL(Math.max(...series.map(s=>s.cum[i])))/H*r.height)+'px';
+    });
+    svg.addEventListener('mouseleave',()=>{ guide.style.display='none'; tip.style.display='none'; });
+  }
+
+  document.querySelectorAll('#viewSeg button').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('#viewSeg button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); view=b.dataset.v; render();
+  });
+  render();
+</script>
+</body>
+</html>
