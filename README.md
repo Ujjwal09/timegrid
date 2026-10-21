@@ -1,5 +1,7 @@
 # TimeGrid
 
+**Links:** [GitHub repo](https://github.com/Ujjwal09/ujjwaltigga) · [Notion docs](https://app.notion.com/p/1-0-TimeGrid-3f857bd3886b80958235d61f09d18b44)
+
 A minimalist, always-on-top desktop overlay for tracking daily time utilisation. Each day is 48 half-hour slots (shown as 24 hour-rows × two half-hour cells); click a cell to mark that time as *utilised* and tag it with a **category + specific topic**. You can **plan** future days ahead, and revisit/analyse history — with category goals, tasks, and motivation reels/notes.
 
 ## Run
