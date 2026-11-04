@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TimeGrid — Weekly Priorities preview</title>
+<style>
+  :root{
+    --bg:#14151a;--card:#1c1e25;--line:rgba(255,255,255,0.07);
+    --text:#e7e8ec;--muted:#8b8d98;--faint:#4a4c57;--accent:#5eead4;--accent-dim:rgba(94,234,212,0.16);--no:#f0708a;
+    --font:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--font);background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;padding:28px 32px;max-width:760px;margin:0 auto}
+  h1{font-size:18px;font-weight:600;letter-spacing:.3px;margin-bottom:2px}
+  .sub{color:var(--muted);font-size:12px;margin-bottom:20px}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:18px}
+  .card h2{font-size:13px;font-weight:600;color:var(--muted);letter-spacing:.3px;margin-bottom:14px;display:flex;align-items:center;gap:10px}
+  .card h2 .spacer{flex:1}
+  .datenav{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text)}
+  .datenav button{width:22px;height:22px;border:none;background:transparent;color:var(--muted);border-radius:6px;cursor:pointer}
+  .datenav button:hover{background:rgba(255,255,255,0.08);color:var(--text)}
+  .datenav button:disabled{opacity:.3;cursor:default}
+  .datenav .d{min-width:118px;text-align:center;font-variant-numeric:tabular-nums}
+  .datenav .today{color:var(--accent);font-size:9px;border:1px solid var(--accent-dim);border-radius:4px;padding:1px 5px}
+
+  .sect{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--faint);margin:2px 0 8px}
+  .wprow{display:flex;align-items:center;gap:10px;padding:5px 2px}
+  .chk{width:19px;height:19px;border-radius:6px;border:1.5px solid var(--faint);cursor:pointer;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;transition:all .13s}
+  .chk:hover{border-color:var(--muted)}
+  .chk.on{background:var(--accent);border-color:var(--accent)}
+  .chk.on::after{content:"";width:5px;height:9px;border:solid #0f1114;border-width:0 2px 2px 0;transform:rotate(45deg);margin-bottom:2px}
+  .wpnum{width:16px;text-align:center;font-size:13px;font-weight:600;color:var(--accent);flex:0 0 auto;font-variant-numeric:tabular-nums}
+  .wprow input{flex:1;min-width:0;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text);font-family:var(--font);font-size:14px;padding:4px 2px;outline:none}
+  .wprow input:focus{border-bottom-color:var(--line)}
+  .wprow input::placeholder{color:var(--faint)}
+  .wprow.done input{text-decoration:line-through;color:var(--muted)}
+  .del{border:none;background:transparent;color:var(--faint);cursor:pointer;font-size:13px;flex:0 0 auto;width:22px}
+  .del:hover{color:var(--no)}
+
+  .divider{height:1px;background:var(--line);margin:14px 0}
+  .adhoc-hd{display:flex;align-items:center}
+  .adhoc-hd .spacer{flex:1}
+  .btn{border:1px solid var(--accent);background:var(--accent-dim);color:var(--accent);border-radius:8px;padding:4px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font)}
+  .empty{color:var(--faint);font-size:12px;padding:6px 2px}
+</style>
+</head>
+<body>
+  <h1>Weekly Priorities <span style="color:var(--faint);font-weight:400;font-size:13px">(browser preview)</span></h1>
+  <div class="sub">Your 3 focus items for the week, plus an ad-hoc overflow list. Navigate weeks with ‹ ›. Persists in this browser for the preview.</div>
+
+  <div class="card">
+    <h2>WEEKLY PRIORITIES
+      <span class="spacer"></span>
+      <div class="datenav">
+        <button id="prev">‹</button>
+        <span class="d" id="rangeLbl">—</span>
+        <span class="today" id="thisTag">this week</span>
+        <button id="next">›</button>
+      </div>
+    </h2>
+
+    <div class="sect">Top 3 · focus</div>
+    <div id="top"></div>
+
+    <div class="divider"></div>
+
+    <div class="adhoc-hd">
+      <div class="sect" style="margin:0">Also this week (ad-hoc)</div>
+      <span class="spacer"></span>
+      <button class="btn" id="addAdhoc">+ Add</button>
+    </div>
+    <div id="adhoc" style="margin-top:8px"></div>
+    <div class="empty" id="adhocEmpty" style="display:none">Nothing extra yet — add anything beyond your top 3.</div>
+  </div>
+
+<script>
+  const pad=n=>String(n).padStart(2,'0');
+  const MS_DAY=86400000;
+  const todayMid=new Date(); todayMid.setHours(0,0,0,0);
+  function mondayOf(date){ const d=new Date(date); d.setHours(0,0,0,0); const off=(d.getDay()+6)%7; d.setDate(d.getDate()-off); return d; }
+  const keyOf=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const curMonday=mondayOf(todayMid);
+  let viewMonday=new Date(curMonday);
+
+  const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function rangeLabel(mon){
+    const sun=new Date(mon.getTime()+6*MS_DAY);
+    if(mon.getMonth()===sun.getMonth()) return `${mon.getDate()}–${sun.getDate()} ${MON[sun.getMonth()]}`;
+    return `${mon.getDate()} ${MON[mon.getMonth()]}–${sun.getDate()} ${MON[sun.getMonth()]}`;
+  }
+  const isThisWeek=()=>viewMonday.getTime()===curMonday.getTime();
+
+  const DEFAULT=()=>({ top:[{text:'',done:false},{text:'',done:false},{text:'',done:false}], adhoc:[] });
+  const load=k=>{ try{ return JSON.parse(localStorage.getItem('tg:proto:weekly:'+k))||DEFAULT(); }catch{ return DEFAULT(); } };
+  const save=(k,v)=>localStorage.setItem('tg:proto:weekly:'+k,JSON.stringify(v));
+  let data=load(keyOf(viewMonday));
+  const persist=()=>save(keyOf(viewMonday),data);
+  const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+  function render(){
+    document.getElementById('rangeLbl').textContent=rangeLabel(viewMonday);
+    document.getElementById('thisTag').style.display=isThisWeek()?'':'none';
+    document.getElementById('next').disabled=isThisWeek();
+
+    // top 3
+    const top=document.getElementById('top');
+    top.innerHTML=data.top.map((it,i)=>`
+      <div class="wprow ${it.done?'done':''}" data-i="${i}">
+        <span class="chk ${it.done?'on':''}" data-top="${i}"></span>
+        <span class="wpnum">${i+1}</span>
+        <input data-toptext="${i}" placeholder="Priority ${i+1}…" value="${esc(it.text)}">
+      </div>`).join('');
+    top.querySelectorAll('[data-top]').forEach(c=>c.onclick=()=>{ data.top[c.dataset.top].done=!data.top[c.dataset.top].done; persist(); render(); });
+    top.querySelectorAll('[data-toptext]').forEach(inp=>inp.oninput=()=>{ data.top[inp.dataset.toptext].text=inp.value; persist(); });
+
+    // ad-hoc
+    const ah=document.getElementById('adhoc');
+    ah.innerHTML=data.adhoc.map(it=>`
+      <div class="wprow ${it.done?'done':''}" data-id="${it.id}">
+        <span class="chk ${it.done?'on':''}" data-ah="${it.id}"></span>
+        <input data-ahtext="${it.id}" placeholder="Something to do…" value="${esc(it.text)}">
+        <button class="del" data-del="${it.id}" title="Remove">✕</button>
+      </div>`).join('');
+    document.getElementById('adhocEmpty').style.display=data.adhoc.length?'none':'';
+    ah.querySelectorAll('[data-ah]').forEach(c=>c.onclick=()=>{ const it=data.adhoc.find(x=>x.id===c.dataset.ah); it.done=!it.done; persist(); render(); });
+    ah.querySelectorAll('[data-ahtext]').forEach(inp=>inp.oninput=()=>{ const it=data.adhoc.find(x=>x.id===inp.dataset.ahtext); it.text=inp.value; persist(); });
+    ah.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{ data.adhoc=data.adhoc.filter(x=>x.id!==b.dataset.del); persist(); render(); });
+  }
+
+  document.getElementById('addAdhoc').onclick=()=>{
+    data.adhoc.push({id:Date.now()+''+Math.random().toString(36).slice(2,5),text:'',done:false});
+    persist(); render();
+    const inputs=document.querySelectorAll('#adhoc [data-ahtext]'); if(inputs.length) inputs[inputs.length-1].focus();
+  };
+  document.getElementById('prev').onclick=()=>{ viewMonday=new Date(viewMonday.getTime()-7*MS_DAY); data=load(keyOf(viewMonday)); render(); };
+  document.getElementById('next').onclick=()=>{ if(isThisWeek())return; viewMonday=new Date(viewMonday.getTime()+7*MS_DAY); data=load(keyOf(viewMonday)); render(); };
+
+  render();
+</script>
+</body>
+</html>

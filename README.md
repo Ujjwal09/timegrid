@@ -30,6 +30,7 @@ Reachable via **Analytics ↗** in the tracker; a **▦** button in the Analytic
 
 - **Daily target** box (default 8h) — drives every daily percentage; changes carry forward.
 - **KPI tiles** — Today, 7-day avg, Target-hit days, current streak (all vs. your target).
+- **Weekly Priorities** — your **top 3** focus items for the week plus an additive **ad-hoc** overflow list, each a checkbox + text (strike-through when done). A **‹ ›** stepper moves across calendar **Mon–Sun** weeks (past + current). Stored per week.
 - **Daily** — a fixed checklist of 4 daily habits (ChatGPT discussion · System Design · Deconstruct a company · Gym), each with a checkbox and a **📝 note** (a small overlay to write that day's note). A **‹ date ›** stepper browses past days. Stored day-wise in the app, and each day is also written to a readable text file (see Storage).
 - **Category goals** — per-category completion bars toward the **10 / 24 / 50 / 100h** milestones (specific topics roll up to their category).
 - **Goals trend** — cumulative hours per category over time, with **D / W / M** views, week-end value labels, an adaptive 10→24→50→100 y-axis, and hover to see the nearest category's value.
@@ -69,7 +70,7 @@ habits-prototype.html     Daily habits mockup (browser)
 ## Storage
 
 Plain JSON at `~/Library/Application Support/timegrid/timegrid-data.json`, shaped as
-`{ "days": { "YYYY-MM-DD": { "<slot 0..47>": "topic" } }, "plans": { "YYYY-MM-DD": { "<slot>": "topic" } }, "catMap": { "<topic>": "<category>" }, "settings": { "target": 8 }, "tasks": [...], "motivation": { "reels": [...], "notes": [...] }, "habits": { "YYYY-MM-DD": { "checks": {...}, "notes": {...} } } }`.
+`{ "days": { "YYYY-MM-DD": { "<slot 0..47>": "topic" } }, "plans": { "YYYY-MM-DD": { "<slot>": "topic" } }, "catMap": { "<topic>": "<category>" }, "settings": { "target": 8 }, "tasks": [...], "motivation": { "reels": [...], "notes": [...] }, "habits": { "YYYY-MM-DD": { "checks": {...}, "notes": {...} } }, "weekly": { "<Monday YYYY-MM-DD>": { "top": [{ "text", "done" }], "adhoc": [{ "id", "text", "done" }] } } }`.
 `days` holds actual (utilised) slots; `plans` holds intended slots; `catMap` rolls specific topics up to categories.
 Old flat `{ "YYYY-MM-DD": [...] }` files auto-migrate on load. Chosen over SQLite to stay
 dependency-free and avoid native builds against Electron's ABI.

@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('tg', {
   setNotes: (notes) => ipcRenderer.invoke('notes:set', notes),
   getHabits: (dateKey) => ipcRenderer.invoke('habits:get', dateKey),
   setHabits: (dateKey, data) => ipcRenderer.invoke('habits:set', dateKey, data),
+  getWeekly: (weekKey) => ipcRenderer.invoke('weekly:get', weekKey),
+  setWeekly: (weekKey, data) => ipcRenderer.invoke('weekly:set', weekKey, data),
   // window
   minimize: () => ipcRenderer.send('win:minimize'),
   close: () => ipcRenderer.send('win:close'),

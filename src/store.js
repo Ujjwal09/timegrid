@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 let filePath;
-let cache = { days: {}, plans: {}, catMap: {}, settings: { target: 8 }, tasks: [], motivation: { reels: [], notes: [] }, habits: {} };
+let cache = { days: {}, plans: {}, catMap: {}, settings: { target: 8 }, tasks: [], motivation: { reels: [], notes: [] }, habits: {}, weekly: {} };
 
 // Back-compat: older days stored as arrays of slot indexes.
 function normalizeDay(v) {
@@ -33,6 +33,7 @@ function init(userDataDir) {
         notes: Array.isArray(raw.motivation && raw.motivation.notes) ? raw.motivation.notes : [],
       };
       cache.habits = (raw.habits && typeof raw.habits === 'object') ? raw.habits : {};
+      cache.weekly = (raw.weekly && typeof raw.weekly === 'object') ? raw.weekly : {};
     } else if (raw) {
       // old flat format: every key is a date
       for (const k of Object.keys(raw)) cache.days[k] = normalizeDay(raw[k]);
@@ -122,4 +123,19 @@ function setHabits(dateKey, data) {
   flush();
 }
 
-module.exports = { init, getDay, setDay, getAll, getPlan, setPlan, getCatMap, setCatMap, getSettings, setSetting, getTasks, setTasks, getMotivation, setReels, setNotes, getHabits, setHabits };
+// Weekly priorities per week (keyed by that week's Monday YYYY-MM-DD):
+// { top: [{text, done} x3], adhoc: [{id, text, done}] }
+function getWeekly(weekKey) {
+  return cache.weekly[weekKey] || { top: [{ text: '', done: false }, { text: '', done: false }, { text: '', done: false }], adhoc: [] };
+}
+function setWeekly(weekKey, data) {
+  const top = (data && Array.isArray(data.top)) ? data.top : [];
+  const adhoc = (data && Array.isArray(data.adhoc)) ? data.adhoc : [];
+  const anyTop = top.some(t => (t && t.text || '').trim());
+  const anyAdhoc = adhoc.some(t => (t && t.text || '').trim());
+  if (anyTop || anyAdhoc) cache.weekly[weekKey] = { top, adhoc };
+  else delete cache.weekly[weekKey];
+  flush();
+}
+
+module.exports = { init, getDay, setDay, getAll, getPlan, setPlan, getCatMap, setCatMap, getSettings, setSetting, getTasks, setTasks, getMotivation, setReels, setNotes, getHabits, setHabits, getWeekly, setWeekly };

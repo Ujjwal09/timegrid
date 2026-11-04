@@ -79,6 +79,8 @@ ipcMain.handle('reels:set', (_e, reels) => { store.setReels(reels); return true;
 ipcMain.handle('notes:set', (_e, notes) => { store.setNotes(notes); return true; });
 ipcMain.handle('habits:get', (_e, dateKey) => store.getHabits(dateKey));
 ipcMain.handle('habits:set', (_e, dateKey, data) => { store.setHabits(dateKey, data); writeHabitsFile(dateKey, data); return true; });
+ipcMain.handle('weekly:get', (_e, weekKey) => store.getWeekly(weekKey));
+ipcMain.handle('weekly:set', (_e, weekKey, data) => { store.setWeekly(weekKey, data); return true; });
 
 // ---- Daily habits: also write a human-readable text file per day (for use outside the app) ----
 const HABIT_ITEMS = [

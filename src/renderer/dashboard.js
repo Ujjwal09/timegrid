@@ -95,6 +95,9 @@ el('backBtn').onclick = () => window.tg.openTracker();
   // ---- daily habits ----
   await initHabits();
 
+  // ---- weekly priorities ----
+  await initWeekly();
+
   // ---- tasks ----
   const tasks = await window.tg.getTasks();
   initTasks(tasks);
@@ -102,6 +105,61 @@ el('backBtn').onclick = () => window.tg.openTracker();
   // ---- motivation (reels + notes) ----
   await initMotivation();
 })();
+
+// ---- weekly priorities ----
+const WP_MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function mondayOf(date) { const d = new Date(date); d.setHours(0, 0, 0, 0); const off = (d.getDay() + 6) % 7; d.setDate(d.getDate() - off); return d; }
+function weekRangeLabel(mon) {
+  const sun = new Date(mon.getTime() + 6 * DAY);
+  if (mon.getMonth() === sun.getMonth()) return `${mon.getDate()}–${sun.getDate()} ${WP_MON[sun.getMonth()]}`;
+  return `${mon.getDate()} ${WP_MON[mon.getMonth()]}–${sun.getDate()} ${WP_MON[sun.getMonth()]}`;
+}
+
+async function initWeekly() {
+  const todayMid = new Date(); todayMid.setHours(0, 0, 0, 0);
+  const curMonday = mondayOf(todayMid);
+  let viewMonday = new Date(curMonday);
+  const isThisWeek = () => viewMonday.getTime() === curMonday.getTime();
+  let data = { top: [{ text: '', done: false }, { text: '', done: false }, { text: '', done: false }], adhoc: [] };
+
+  const topHost = el('wpTop'), ahHost = el('wpAdhoc');
+  async function loadWeek() { data = await window.tg.getWeekly(keyOf(viewMonday)); }
+  function persist() { window.tg.setWeekly(keyOf(viewMonday), data); }
+
+  function render() {
+    el('wpRangeLbl').textContent = weekRangeLabel(viewMonday);
+    el('wpThisTag').style.display = isThisWeek() ? '' : 'none';
+    el('wpNext').disabled = isThisWeek();
+
+    topHost.innerHTML = data.top.map((it, i) => `<div class="wprow ${it.done ? 'done' : ''}">
+      <span class="chk ${it.done ? 'on' : ''}" data-top="${i}"></span>
+      <span class="wpnum">${i + 1}</span>
+      <input data-toptext="${i}" placeholder="Priority ${i + 1}…" value="${escapeHtml(it.text || '')}">
+    </div>`).join('');
+    topHost.querySelectorAll('[data-top]').forEach(c => c.onclick = () => { data.top[c.dataset.top].done = !data.top[c.dataset.top].done; persist(); render(); });
+    topHost.querySelectorAll('[data-toptext]').forEach(inp => inp.oninput = () => { data.top[inp.dataset.toptext].text = inp.value; persist(); });
+
+    ahHost.innerHTML = data.adhoc.map(it => `<div class="wprow ${it.done ? 'done' : ''}">
+      <span class="chk ${it.done ? 'on' : ''}" data-ah="${it.id}"></span>
+      <input data-ahtext="${it.id}" placeholder="Something to do…" value="${escapeHtml(it.text || '')}">
+      <button class="del" data-del="${it.id}" title="Remove">✕</button>
+    </div>`).join('');
+    el('wpAdhocEmpty').style.display = data.adhoc.length ? 'none' : '';
+    ahHost.querySelectorAll('[data-ah]').forEach(c => c.onclick = () => { const it = data.adhoc.find(x => x.id === c.dataset.ah); it.done = !it.done; persist(); render(); });
+    ahHost.querySelectorAll('[data-ahtext]').forEach(inp => inp.oninput = () => { const it = data.adhoc.find(x => x.id === inp.dataset.ahtext); it.text = inp.value; persist(); });
+    ahHost.querySelectorAll('[data-del]').forEach(b => b.onclick = () => { data.adhoc = data.adhoc.filter(x => x.id !== b.dataset.del); persist(); render(); });
+  }
+
+  el('wpAddAdhoc').onclick = () => {
+    data.adhoc.push({ id: Date.now() + '' + Math.random().toString(36).slice(2, 5), text: '', done: false });
+    persist(); render();
+    const inputs = ahHost.querySelectorAll('[data-ahtext]'); if (inputs.length) inputs[inputs.length - 1].focus();
+  };
+  el('wpPrev').onclick = async () => { viewMonday = new Date(viewMonday.getTime() - 7 * DAY); await loadWeek(); render(); };
+  el('wpNext').onclick = async () => { if (isThisWeek()) return; viewMonday = new Date(viewMonday.getTime() + 7 * DAY); await loadWeek(); render(); };
+
+  await loadWeek(); render();
+}
 
 const HABIT_ITEMS = [
   { id: 'chatgpt', label: 'ChatGPT — Discussion on certain topic' },
