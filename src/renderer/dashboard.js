@@ -99,8 +99,7 @@ el('backBtn').onclick = () => window.tg.openTracker();
   await initWeekly();
 
   // ---- tasks ----
-  const tasks = await window.tg.getTasks();
-  initTasks(tasks);
+  await initTasks();
 
   // ---- motivation (reels + notes) ----
   await initMotivation();
@@ -224,8 +223,6 @@ async function initHabits() {
 async function initMotivation() {
   const m = await window.tg.getMotivation();
   let reels = Array.isArray(m.reels) ? m.reels : [];
-  let notes = Array.isArray(m.notes) ? m.notes : [];
-  const fmt = ts => new Date(ts).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   const shortcode = url => { const x = String(url).match(/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/); return x ? x[1] : null; };
 
   // reels
@@ -249,30 +246,7 @@ async function initMotivation() {
   };
   el('reelUrl').addEventListener('keydown', e => { if (e.key === 'Enter') el('addReel').click(); });
 
-  // notes
-  const noteHost = el('notes');
-  function renderNotes() {
-    noteHost.innerHTML = notes.map(n => `<div class="note" data-id="${n.id}">
-      <textarea placeholder="Write a note…">${escapeHtml(n.text || '')}</textarea>
-      <div class="foot"><span class="when">${n.ts ? 'edited ' + fmt(n.ts) : ''}</span><button class="del">Delete</button></div>
-    </div>`).join('');
-    el('notesEmpty').style.display = notes.length ? 'none' : '';
-    noteHost.querySelectorAll('.note').forEach(row => {
-      const id = row.dataset.id, ta = row.querySelector('textarea');
-      ta.oninput = () => {
-        const n = notes.find(x => x.id === id); n.text = ta.value; n.ts = Date.now();
-        row.querySelector('.when').textContent = 'edited ' + fmt(n.ts); window.tg.setNotes(notes);
-      };
-      row.querySelector('.del').onclick = () => { notes = notes.filter(x => x.id !== id); window.tg.setNotes(notes); renderNotes(); };
-    });
-  }
-  el('addNote').onclick = () => {
-    notes = [{ id: Date.now() + '' + Math.random().toString(36).slice(2, 5), text: '', ts: Date.now() }, ...notes];
-    window.tg.setNotes(notes); renderNotes();
-    const first = noteHost.querySelector('.note textarea'); if (first) first.focus();
-  };
-
-  renderReels(); renderNotes();
+  renderReels();
 }
 
 // Build goalDates + goalSeries (cumulative hours per category) over earliest..today.
@@ -486,53 +460,52 @@ document.querySelectorAll('#viewSeg button').forEach(b => {
 });
 
 // ---- tasks ----
-function initTasks(loaded) {
-  let tasks = Array.isArray(loaded) ? loaded : [];
-  let showCompleted = false;
-  const saveTasks = () => window.tg.setTasks(tasks);
+// Date-based daily tasks: a per-date list, navigable with ‹ ›, that syncs one-way
+// to Notion (handled in the main process). Completion records a local timestamp.
+async function initTasks() {
+  const todayMid = new Date(); todayMid.setHours(0, 0, 0, 0);
+  let viewDate = new Date(todayMid);
+  let day = { headingId: null, items: [] };
+  const isToday = () => viewDate.getTime() === todayMid.getTime();
+  const fmtTime = ts => new Date(ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+  async function load() { day = await window.tg.getDaily(keyOf(viewDate)); }
 
   function render() {
-    const now = Date.now();
-    const activeT = tasks.filter(t => !t.done);
-    const doneT = tasks.filter(t => t.done);
-
-    el('activeRows').innerHTML = activeT.map(t => {
-      const age = daysBetween(t.start, now);
-      return `<tr data-id="${t.id}">
-        <td class="c"><span class="chk" data-id="${t.id}"></span></td>
-        <td class="tname">${escapeHtml(t.name)}</td>
-        <td class="d">${fmtDate(t.start)}</td>
-        <td class="o"><span class="agebadge ${age >= 7 ? 'warn' : ''}">${age}d</span></td>
-      </tr>`;
-    }).join('');
-    el('activeEmpty').style.display = activeT.length ? 'none' : '';
-
-    el('doneCount').textContent = doneT.length;
-    el('completedHdr').firstChild.textContent = (showCompleted ? '▾ ' : '▸ ') + 'Completed (';
-    el('completedTable').style.display = (showCompleted && doneT.length) ? '' : 'none';
-    el('completedRows').innerHTML = doneT.map(t => `<tr class="done" data-id="${t.id}">
-        <td class="c"><span class="chk on" data-id="${t.id}"></span></td>
-        <td class="tname">${escapeHtml(t.name)}</td>
-        <td class="d">${fmtDate(t.doneAt)}</td>
-        <td class="o">${daysBetween(t.start, t.doneAt)}d</td>
-      </tr>`).join('');
-
-    document.querySelectorAll('#activeRows .chk, #completedRows .chk').forEach(c => {
-      c.onclick = () => {
-        const t = tasks.find(x => x.id === c.dataset.id); if (!t) return;
-        t.done = !t.done; t.doneAt = t.done ? Date.now() : null; saveTasks(); render();
-      };
+    el('dtDateLbl').textContent = viewDate.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+    el('dtTodayTag').style.display = isToday() ? '' : 'none';
+    const items = (day && day.items) || [];
+    if (!items.length) {
+      el('dtList').innerHTML = '<div class="dtempty">No tasks for this day yet — add one above.</div>';
+      return;
+    }
+    // open tasks first; completed sink to the bottom (keeping each group's order)
+    const ordered = [...items.filter(t => !t.done), ...items.filter(t => t.done)];
+    el('dtList').innerHTML = ordered.map(t => `<div class="dtrow ${t.done ? 'done' : ''}" data-id="${t.id}">
+        <span class="chk ${t.done ? 'on' : ''}" data-id="${t.id}"></span>
+        <span class="dtname">${escapeHtml(t.name)}</span>
+        ${t.done && t.doneAt ? `<span class="dttime">done ${fmtTime(t.doneAt)}</span>` : ''}
+        <button class="dtdel" data-del="${t.id}" title="Remove">✕</button>
+      </div>`).join('');
+    document.querySelectorAll('#dtList .chk').forEach(c => {
+      c.onclick = async () => { day = await window.tg.toggleDaily(keyOf(viewDate), c.dataset.id); render(); };
+    });
+    document.querySelectorAll('#dtList .dtdel').forEach(b => {
+      b.onclick = async () => { day = await window.tg.removeDaily(keyOf(viewDate), b.dataset.del); render(); };
     });
   }
-  function addTask() {
+
+  async function addTask() {
     const inp = el('taskInput'); const name = inp.value.trim(); if (!name) return;
-    tasks.push({ id: Date.now() + '' + Math.random().toString(36).slice(2, 5), name, start: Date.now(), done: false, doneAt: null });
-    inp.value = ''; saveTasks(); render();
+    inp.value = '';
+    day = await window.tg.addDaily(keyOf(viewDate), name); render();
   }
   el('addTask').onclick = addTask;
   el('taskInput').addEventListener('keydown', e => { if (e.key === 'Enter') addTask(); });
-  el('completedHdr').onclick = () => { showCompleted = !showCompleted; render(); };
-  render();
+  el('dtPrev').onclick = async () => { viewDate.setDate(viewDate.getDate() - 1); await load(); render(); };
+  el('dtNext').onclick = async () => { viewDate.setDate(viewDate.getDate() + 1); await load(); render(); };
+
+  await load(); render();
 }
 
 // Generic SVG bar chart. vals scaled to `max`. labelFn(item,i)->string for x-axis.

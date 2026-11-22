@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 let filePath;
-let cache = { days: {}, plans: {}, catMap: {}, settings: { target: 8 }, tasks: [], motivation: { reels: [], notes: [] }, habits: {}, weekly: {} };
+let cache = { days: {}, plans: {}, catMap: {}, settings: { target: 8 }, tasks: [], motivation: { reels: [], notes: [] }, habits: {}, weekly: {}, dailyTasks: {} };
 
 // Back-compat: older days stored as arrays of slot indexes.
 function normalizeDay(v) {
@@ -34,6 +34,7 @@ function init(userDataDir) {
       };
       cache.habits = (raw.habits && typeof raw.habits === 'object') ? raw.habits : {};
       cache.weekly = (raw.weekly && typeof raw.weekly === 'object') ? raw.weekly : {};
+      cache.dailyTasks = (raw.dailyTasks && typeof raw.dailyTasks === 'object') ? raw.dailyTasks : {};
     } else if (raw) {
       // old flat format: every key is a date
       for (const k of Object.keys(raw)) cache.days[k] = normalizeDay(raw[k]);
@@ -138,4 +139,42 @@ function setWeekly(weekKey, data) {
   flush();
 }
 
-module.exports = { init, getDay, setDay, getAll, getPlan, setPlan, getCatMap, setCatMap, getSettings, setSetting, getTasks, setTasks, getMotivation, setReels, setNotes, getHabits, setHabits, getWeekly, setWeekly };
+// Date-based daily tasks, keyed by date (YYYY-MM-DD):
+//   { headingId: <notion toggle-heading block id | null>, items: [ {id, name, done, doneAt, notionBlockId} ] }
+// The old flat `tasks` array above is retained untouched (archive).
+function getDailyDay(date) {
+  const d = cache.dailyTasks[date];
+  return { headingId: (d && d.headingId) || null, items: (d && Array.isArray(d.items)) ? d.items : [] };
+}
+function writeDailyDay(date, day) {
+  if (day && Array.isArray(day.items) && day.items.length) cache.dailyTasks[date] = { headingId: day.headingId || null, items: day.items };
+  else delete cache.dailyTasks[date];
+  flush();
+}
+function setDailyHeading(date, headingId) {
+  const day = getDailyDay(date);
+  day.headingId = headingId || null;
+  // only persist a heading if there are items to anchor it to
+  if (day.items.length) { cache.dailyTasks[date] = day; flush(); }
+}
+function addDailyItem(date, item) {
+  const day = getDailyDay(date);
+  day.items.push(item);
+  writeDailyDay(date, day);
+  return day;
+}
+function setDailyItem(date, id, patch) {
+  const day = getDailyDay(date);
+  const t = day.items.find(x => x.id === id);
+  if (t) Object.assign(t, patch);
+  writeDailyDay(date, day);
+  return day;
+}
+function removeDailyItem(date, id) {
+  const day = getDailyDay(date);
+  day.items = day.items.filter(x => x.id !== id);
+  writeDailyDay(date, day);
+  return day;
+}
+
+module.exports = { init, getDay, setDay, getAll, getPlan, setPlan, getCatMap, setCatMap, getSettings, setSetting, getTasks, setTasks, getMotivation, setReels, setNotes, getHabits, setHabits, getWeekly, setWeekly, getDailyDay, setDailyHeading, addDailyItem, setDailyItem, removeDailyItem };

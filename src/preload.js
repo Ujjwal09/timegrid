@@ -20,6 +20,10 @@ contextBridge.exposeInMainWorld('tg', {
   setHabits: (dateKey, data) => ipcRenderer.invoke('habits:set', dateKey, data),
   getWeekly: (weekKey) => ipcRenderer.invoke('weekly:get', weekKey),
   setWeekly: (weekKey, data) => ipcRenderer.invoke('weekly:set', weekKey, data),
+  getDaily: (date) => ipcRenderer.invoke('daily:get', date),
+  addDaily: (date, name) => ipcRenderer.invoke('daily:add', date, name),
+  toggleDaily: (date, id) => ipcRenderer.invoke('daily:toggle', date, id),
+  removeDaily: (date, id) => ipcRenderer.invoke('daily:remove', date, id),
   // window
   minimize: () => ipcRenderer.send('win:minimize'),
   close: () => ipcRenderer.send('win:close'),

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TimeGrid — Daily Tasks preview</title>
+<style>
+  :root{
+    --bg:#14151a;--card:#1c1e25;--line:rgba(255,255,255,0.07);
+    --text:#e7e8ec;--muted:#8b8d98;--faint:#4a4c57;--accent:#5eead4;--accent-dim:rgba(94,234,212,0.16);--no:#f87171;
+    --font:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--font);background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;padding:28px 32px;max-width:760px;margin:0 auto}
+  h1{font-size:18px;font-weight:600;letter-spacing:.3px;margin-bottom:2px}
+  .sub{color:var(--muted);font-size:12px;margin-bottom:20px}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:18px}
+  .card h2{font-size:13px;font-weight:600;color:var(--muted);letter-spacing:.3px;margin-bottom:14px;display:flex;align-items:center;gap:10px}
+  .card h2 .spacer{flex:1}
+  .datenav{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text)}
+  .datenav button{width:22px;height:22px;border:none;background:transparent;color:var(--muted);border-radius:6px;cursor:pointer}
+  .datenav button:hover{background:rgba(255,255,255,0.08);color:var(--text)}
+  .datenav button:disabled{opacity:.3;cursor:default}
+  .datenav .d{min-width:104px;text-align:center;font-variant-numeric:tabular-nums}
+  .datenav .today{color:var(--accent);font-size:9px;border:1px solid var(--accent-dim);border-radius:4px;padding:1px 5px}
+
+  .addrow{display:flex;gap:8px;margin-bottom:12px}
+  .addrow input{flex:1;background:#15161b;border:1px solid var(--line);color:var(--text);border-radius:8px;padding:8px 11px;font-size:13px;font-family:var(--font);outline:none}
+  .addrow input:focus{border-color:var(--accent-dim)}
+  .btn{border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;font-family:var(--font)}
+  .btn:hover{border-color:var(--accent);color:var(--accent)}
+
+  .dtrow{display:flex;align-items:center;gap:12px;padding:10px 4px;border-bottom:1px solid rgba(255,255,255,0.04)}
+  .dtrow:last-child{border-bottom:none}
+  .chk{width:20px;height:20px;border-radius:6px;border:1.5px solid var(--faint);cursor:pointer;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;transition:all .13s}
+  .chk:hover{border-color:var(--muted)}
+  .chk.on{background:var(--accent);border-color:var(--accent)}
+  .chk.on::after{content:"";width:5px;height:9px;border:solid #0f1114;border-width:0 2px 2px 0;transform:rotate(45deg);margin-bottom:2px}
+  .tname{flex:1;font-size:14px}
+  .dtrow.done .tname{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--faint)}
+  .dttime{font-size:10px;color:var(--accent);border:1px solid var(--accent-dim);border-radius:4px;padding:1px 6px;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .del{border:none;background:transparent;color:var(--faint);font-size:14px;cursor:pointer;width:24px;height:24px;border-radius:6px}
+  .del:hover{color:var(--no);background:rgba(248,113,113,0.1)}
+  .empty{color:var(--faint);font-size:13px;padding:8px 4px}
+</style>
+</head>
+<body>
+  <h1>Daily Tasks <span style="color:var(--faint);font-weight:400;font-size:13px">(browser preview)</span></h1>
+  <div class="sub">Add tasks per day, step across dates with ‹ ›, remove with ✕, tick to strike-off (records the completion time). In the app these also sync one-way to your Notion page.</div>
+
+  <div class="card">
+    <h2>TASKS
+      <span class="spacer"></span>
+      <div class="datenav">
+        <button id="prev">‹</button>
+        <span class="d" id="dateLbl">—</span>
+        <span class="today" id="todayTag">today</span>
+        <button id="next">›</button>
+      </div>
+    </h2>
+    <div class="addrow">
+      <input id="taskInput" placeholder="Add a task for this day…" autocomplete="off">
+      <button class="btn" id="addTask">Add</button>
+    </div>
+    <div id="dtList"></div>
+  </div>
+
+<script>
+  const pad=n=>String(n).padStart(2,'0');
+  const todayMid=new Date(); todayMid.setHours(0,0,0,0);
+  let viewDate=new Date(todayMid);
+  const keyOf=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const isToday=()=>viewDate.getTime()===todayMid.getTime();
+  const escapeHtml=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const fmtTime=ts=>new Date(ts).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+
+  const store=k=>JSON.parse(localStorage.getItem('tg:proto:daily:'+k)||'{"items":[]}');
+  const save=(k,v)=>localStorage.setItem('tg:proto:daily:'+k,JSON.stringify(v));
+
+  let data=store(keyOf(viewDate));
+
+  function render(){
+    document.getElementById('dateLbl').textContent=viewDate.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
+    document.getElementById('todayTag').style.display=isToday()?'':'none';
+    const host=document.getElementById('dtList');
+    const items=data.items||[];
+    if(!items.length){ host.innerHTML='<div class="empty">No tasks for this day yet.</div>'; return; }
+    host.innerHTML=items.map(t=>`<div class="dtrow ${t.done?'done':''}" data-id="${t.id}">
+      <span class="chk ${t.done?'on':''}" data-id="${t.id}"></span>
+      <span class="tname">${escapeHtml(t.name)}</span>
+      ${t.done&&t.doneAt?`<span class="dttime">done ${fmtTime(t.doneAt)}</span>`:''}
+      <button class="del" data-del="${t.id}" title="Remove">✕</button>
+    </div>`).join('');
+    host.querySelectorAll('#dtList .chk').forEach(c=>c.onclick=()=>{
+      const t=items.find(x=>x.id===c.dataset.id); if(!t)return;
+      t.done=!t.done; t.doneAt=t.done?Date.now():null; persist(); render();
+    });
+    host.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{
+      data.items=items.filter(x=>x.id!==b.dataset.del); persist(); render();
+    });
+  }
+
+  function addTask(){
+    const inp=document.getElementById('taskInput'); const name=inp.value.trim(); if(!name)return;
+    data.items=data.items||[];
+    data.items.push({id:Date.now()+''+Math.random().toString(36).slice(2,5),name,done:false,doneAt:null});
+    inp.value=''; persist(); render();
+  }
+  function persist(){ save(keyOf(viewDate),data); }
+
+  document.getElementById('addTask').onclick=addTask;
+  document.getElementById('taskInput').addEventListener('keydown',e=>{ if(e.key==='Enter')addTask(); });
+  document.getElementById('prev').onclick=()=>{ viewDate.setDate(viewDate.getDate()-1); data=store(keyOf(viewDate)); render(); };
+  document.getElementById('next').onclick=()=>{ viewDate.setDate(viewDate.getDate()+1); data=store(keyOf(viewDate)); render(); };
+
+  render();
+</script>
+</body>
+</html>

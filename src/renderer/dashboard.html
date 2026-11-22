@@ -75,6 +75,16 @@
   .foldhdr{font-size:12px;color:var(--muted);cursor:pointer;user-select:none;margin-top:14px;display:flex;align-items:center;gap:6px}
   .foldhdr:hover{color:var(--text)}
   .tempty{color:var(--faint);font-size:12px;padding:16px 8px}
+  /* date-based daily tasks */
+  .dtrow{display:flex;align-items:center;gap:12px;padding:10px 4px;border-bottom:1px solid rgba(255,255,255,0.04)}
+  .dtrow:last-child{border-bottom:none}
+  .dtrow .chk{width:20px;height:20px;border-radius:6px}
+  .dtname{flex:1;font-size:14px;color:var(--text)}
+  .dtrow.done .dtname{text-decoration:line-through;color:var(--muted)}
+  .dttime{font-size:10px;color:var(--accent);border:1px solid rgba(94,234,212,0.3);border-radius:4px;padding:1px 6px;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .dtdel{border:none;background:transparent;color:var(--faint);font-size:14px;cursor:pointer;width:24px;height:24px;border-radius:6px}
+  .dtdel:hover{color:#f0708a;background:rgba(240,112,138,0.12)}
+  .dtempty{color:var(--faint);font-size:12px;padding:16px 8px}
   svg{width:100%;height:auto;display:block;overflow:visible}
   .bar{fill:var(--accent);opacity:.85}
   .bar.dim{opacity:.28}
@@ -202,6 +212,23 @@
   </div>
 
   <div class="card">
+    <h2>TASKS
+      <span class="spacer"></span>
+      <div class="datenav">
+        <button id="dtPrev">‹</button>
+        <span class="d" id="dtDateLbl">—</span>
+        <span class="today" id="dtTodayTag">today</span>
+        <button id="dtNext">›</button>
+      </div>
+    </h2>
+    <div class="addrow">
+      <input id="taskInput" placeholder="Add a task for this day…" autocomplete="off">
+      <button id="addTask">Add</button>
+    </div>
+    <div id="dtList"></div>
+  </div>
+
+  <div class="card">
     <h2>DAILY
       <span class="spacer"></span>
       <div class="datenav">
@@ -237,24 +264,6 @@
   </div>
 
   <div class="card">
-    <h2>TASKS</h2>
-    <div class="addrow">
-      <input id="taskInput" placeholder="Add a task…" autocomplete="off">
-      <button id="addTask">Add</button>
-    </div>
-    <table>
-      <thead><tr><th class="c"></th><th>Task</th><th class="d">Started</th><th class="o">Days open</th></tr></thead>
-      <tbody id="activeRows"></tbody>
-    </table>
-    <div id="activeEmpty" class="tempty" style="display:none">No open tasks — add one above.</div>
-    <div class="foldhdr" id="completedHdr">▸ Completed (<span id="doneCount">0</span>)</div>
-    <table id="completedTable" style="display:none;margin-top:8px">
-      <thead><tr><th class="c"></th><th>Task</th><th class="d">Completed</th><th class="o">Took</th></tr></thead>
-      <tbody id="completedRows"></tbody>
-    </table>
-  </div>
-
-  <div class="card">
     <h2>CONSISTENCY — LAST 5 WEEKS</h2>
     <div id="heat"></div>
     <div class="legend">less
@@ -275,12 +284,6 @@
     <div class="reels" id="reels"></div>
     <div class="mempty" id="reelsEmpty" style="display:none">No reels yet — paste a public reel URL above.</div>
     <div class="hint" style="margin-top:12px">Reels play from Instagram (needs internet, public reels only). Click a reel to play.</div>
-  </div>
-
-  <div class="card">
-    <h2>MOTIVATION — NOTES<span class="spacer"></span><button class="btn" id="addNote" style="padding:5px 12px;font-size:12px">+ Note</button></h2>
-    <div id="notes"></div>
-    <div class="mempty" id="notesEmpty" style="display:none">No notes yet — add one to get started.</div>
   </div>
 
   <div class="ovl" id="hOvl">

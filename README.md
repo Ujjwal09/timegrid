@@ -34,12 +34,32 @@ Reachable via **Analytics ↗** in the tracker; a **▦** button in the Analytic
 - **Daily** — a fixed checklist of 4 daily habits (ChatGPT discussion · System Design · Deconstruct a company · Gym), each with a checkbox and a **📝 note** (a small overlay to write that day's note). A **‹ date ›** stepper browses past days. Stored day-wise in the app, and each day is also written to a readable text file (see Storage).
 - **Category goals** — per-category completion bars toward the **10 / 24 / 50 / 100h** milestones (specific topics roll up to their category).
 - **Goals trend** — cumulative hours per category over time, with **D / W / M** views, week-end value labels, an adaptive 10→24→50→100 y-axis, and hover to see the nearest category's value.
-- **Tasks** — add tasks with a checkbox; each shows its start date and a **days-open** age (red past 7 days). Checked tasks move to a collapsible *Completed* section.
+- **Tasks** — **date-based daily tasks**: a **‹ date ›** stepper (default **today**; step forward to plan coming days, back to review past ones), add/remove tasks per day, and a checkbox that **strikes the task off** and stamps the **completion time** (`done HH:MM`). Completed tasks sink to the bottom. Sits just below Weekly Priorities. Each completion's timestamp is stored locally for later "what did I do and when" analysis, and the list **syncs one-way to a Notion page** (see **Notion sync**).
 - **Daily utilisation** — 30-day bar trend with absolute hours labeled.
 - **5-week consistency heatmap**.
-- **Motivation** — save **Instagram reels** (paste a public reel URL; it embeds Instagram's player — needs internet, public reels only) and keep an editable list of **notes**. Both persist locally.
+- **Motivation** — save **Instagram reels** (paste a public reel URL; it embeds Instagram's player — needs internet, public reels only). Persists locally.
 
 All charts are hand-drawn SVG — no external/CDN chart dependencies. (The reels feature is the one exception: it embeds Instagram's own player from the web.)
+
+## Notion sync (daily tasks)
+
+Daily tasks sync **one-way, app → Notion** (the app is the source of truth). When
+you add, complete, or remove a task, it's mirrored on a Notion page as a **to-do
+block** nested under a per-date **toggle heading**; completing a task ticks the
+box and appends `— done HH:MM`. Edits made directly in Notion are **not** pulled
+back. The completion timestamp for analysis lives in the local JSON store, not in
+Notion.
+
+Sync is **best-effort and optional** — without configuration, tasks work fully
+locally and Notion calls are skipped. To enable it, create a Notion **internal
+integration**, **share the target page** with it, and add
+`~/.timegrid/config.json` (outside the repo):
+
+```json
+{ "notionToken": "secret_xxx", "notionPageId": "42057bd3886b80209848c010fd675c23" }
+```
+
+`notionPageId` defaults to the linked page if omitted.
 
 ## Packaging (standalone app)
 
@@ -54,7 +74,8 @@ Builds `dist/mac-arm64/TimeGrid.app` and `dist/TimeGrid-<version>-arm64.dmg`. Th
 ```
 src/
   main.js            Electron main: windows, IPC, window controls
-  store.js           JSON persistence ({ days, plans, catMap, settings, tasks, motivation })
+  store.js           JSON persistence ({ days, plans, catMap, settings, tasks, motivation, habits, weekly, dailyTasks })
+  notion.js          One-way daily-task push to Notion (best-effort; off without config)
   preload.js         Safe bridge exposed to the UI as window.tg
   renderer/
     index.html/renderer.js/styles.css   Tracker panel (track + plan, categories)
@@ -65,12 +86,18 @@ analytics-prototype.html  Analytics design mockup (browser)
 nav-prototype.html        Back-button / target-% mockup (browser)
 motivation-prototype.html Reels + notes mockup (browser)
 habits-prototype.html     Daily habits mockup (browser)
+tasks-daily-prototype.html  Date-based daily tasks mockup (browser)
 ```
+
+A whole-dashboard browser preview (real `dashboard.js` + mock data, no Electron)
+can be regenerated from `src/renderer/` and opened as `dashboard-preview.html`
+(uses `mock-tg.js`); both are preview-only and not part of the shipped app.
 
 ## Storage
 
 Plain JSON at `~/Library/Application Support/timegrid/timegrid-data.json`, shaped as
-`{ "days": { "YYYY-MM-DD": { "<slot 0..47>": "topic" } }, "plans": { "YYYY-MM-DD": { "<slot>": "topic" } }, "catMap": { "<topic>": "<category>" }, "settings": { "target": 8 }, "tasks": [...], "motivation": { "reels": [...], "notes": [...] }, "habits": { "YYYY-MM-DD": { "checks": {...}, "notes": {...} } }, "weekly": { "<Monday YYYY-MM-DD>": { "top": [{ "text", "done" }], "adhoc": [{ "id", "text", "done" }] } } }`.
+`{ "days": { "YYYY-MM-DD": { "<slot 0..47>": "topic" } }, "plans": { "YYYY-MM-DD": { "<slot>": "topic" } }, "catMap": { "<topic>": "<category>" }, "settings": { "target": 8 }, "tasks": [...], "motivation": { "reels": [...], "notes": [...] }, "habits": { "YYYY-MM-DD": { "checks": {...}, "notes": {...} } }, "weekly": { "<Monday YYYY-MM-DD>": { "top": [{ "text", "done" }], "adhoc": [{ "id", "text", "done" }] } }, "dailyTasks": { "YYYY-MM-DD": { "headingId": "<notion block id|null>", "items": [{ "id", "name", "done", "doneAt", "notionBlockId" }] } } }`.
+The old flat `tasks` array and `motivation.notes` are retained as archives (no longer surfaced in the UI).
 `days` holds actual (utilised) slots; `plans` holds intended slots; `catMap` rolls specific topics up to categories.
 Old flat `{ "YYYY-MM-DD": [...] }` files auto-migrate on load. Chosen over SQLite to stay
 dependency-free and avoid native builds against Electron's ABI.

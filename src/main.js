@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const store = require('./store');
+const notion = require('./notion');
 
 let panel;      // floating tracker
 let dashboard;  // analytics window
@@ -81,6 +82,47 @@ ipcMain.handle('habits:get', (_e, dateKey) => store.getHabits(dateKey));
 ipcMain.handle('habits:set', (_e, dateKey, data) => { store.setHabits(dateKey, data); writeHabitsFile(dateKey, data); return true; });
 ipcMain.handle('weekly:get', (_e, weekKey) => store.getWeekly(weekKey));
 ipcMain.handle('weekly:set', (_e, weekKey, data) => { store.setWeekly(weekKey, data); return true; });
+
+// ---- Date-based daily tasks (local store + best-effort one-way push to Notion) ----
+const uid = () => Date.now() + '' + Math.random().toString(36).slice(2, 5);
+const hhmm = ts => { const d = new Date(ts); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+
+ipcMain.handle('daily:get', (_e, date) => store.getDailyDay(date));
+
+ipcMain.handle('daily:add', async (_e, date, name) => {
+  const item = { id: uid(), name, done: false, doneAt: null, notionBlockId: null };
+  store.addDailyItem(date, item);
+  if (notion.enabled()) {
+    let headingId = store.getDailyDay(date).headingId;
+    if (!headingId) { headingId = await notion.createDateHeading(date); if (headingId) store.setDailyHeading(date, headingId); }
+    let blockId = await notion.addTodo(headingId, name);
+    if (!blockId && headingId) { // heading went stale (e.g. deleted in Notion) — recreate once
+      headingId = await notion.createDateHeading(date); if (headingId) store.setDailyHeading(date, headingId);
+      blockId = await notion.addTodo(headingId, name);
+    }
+    if (blockId) store.setDailyItem(date, item.id, { notionBlockId: blockId });
+  }
+  return store.getDailyDay(date);
+});
+
+ipcMain.handle('daily:toggle', async (_e, date, id) => {
+  const cur = store.getDailyDay(date).items.find(x => x.id === id);
+  if (!cur) return store.getDailyDay(date);
+  const done = !cur.done;
+  const doneAt = done ? Date.now() : null;
+  store.setDailyItem(date, id, { done, doneAt });
+  if (notion.enabled() && cur.notionBlockId) {
+    await notion.setTodo(cur.notionBlockId, { checked: done, text: done ? `${cur.name} — done ${hhmm(doneAt)}` : cur.name });
+  }
+  return store.getDailyDay(date);
+});
+
+ipcMain.handle('daily:remove', async (_e, date, id) => {
+  const cur = store.getDailyDay(date).items.find(x => x.id === id);
+  if (notion.enabled() && cur && cur.notionBlockId) await notion.deleteBlock(cur.notionBlockId);
+  store.removeDailyItem(date, id);
+  return store.getDailyDay(date);
+});
 
 // ---- Daily habits: also write a human-readable text file per day (for use outside the app) ----
 const HABIT_ITEMS = [
