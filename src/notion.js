@@ -46,6 +46,26 @@ async function api(method, pathname, body) {
 
 const richText = content => [{ type: 'text', text: { content: String(content).slice(0, 2000) } }];
 
+// Find an existing toggle heading on the page whose text equals `date`; return its id (or null).
+async function findDateHeading(date) {
+  if (!enabled()) return null;
+  try {
+    let cursor = null;
+    do {
+      const qs = cursor ? `?page_size=100&start_cursor=${cursor}` : '?page_size=100';
+      const out = await api('GET', `/blocks/${config().pageId}/children${qs}`);
+      for (const b of out.results || []) {
+        if (b.type === 'heading_2' && b.heading_2) {
+          const txt = (b.heading_2.rich_text || []).map(r => r.plain_text || '').join('').trim();
+          if (txt === date) return b.id;
+        }
+      }
+      cursor = out.has_more ? out.next_cursor : null;
+    } while (cursor);
+    return null;
+  } catch (e) { console.error('[notion] findDateHeading', e.message); return null; }
+}
+
 // Create a toggleable date heading directly on the page; return its block id (or null).
 async function createDateHeading(date) {
   if (!enabled()) return null;
@@ -55,6 +75,13 @@ async function createDateHeading(date) {
     });
     return out.results && out.results[0] ? out.results[0].id : null;
   } catch (e) { console.error('[notion] createDateHeading', e.message); return null; }
+}
+
+// Reuse the page's existing heading for this date, creating one only if absent.
+// Guarantees a single block per date (idempotent / self-healing against duplicates).
+async function ensureDateHeading(date) {
+  if (!enabled()) return null;
+  return (await findDateHeading(date)) || createDateHeading(date);
 }
 
 // Append a to-do block under a heading; return its block id (or null).
@@ -86,4 +113,4 @@ async function deleteBlock(blockId) {
   } catch (e) { console.error('[notion] deleteBlock', e.message); return false; }
 }
 
-module.exports = { enabled, createDateHeading, addTodo, setTodo, deleteBlock };
+module.exports = { enabled, ensureDateHeading, addTodo, setTodo, deleteBlock };

@@ -93,14 +93,13 @@ ipcMain.handle('daily:add', async (_e, date, name) => {
   const item = { id: uid(), name, done: false, doneAt: null, notionBlockId: null };
   store.addDailyItem(date, item);
   if (notion.enabled()) {
-    let headingId = store.getDailyDay(date).headingId;
-    if (!headingId) { headingId = await notion.createDateHeading(date); if (headingId) store.setDailyHeading(date, headingId); }
-    let blockId = await notion.addTodo(headingId, name);
-    if (!blockId && headingId) { // heading went stale (e.g. deleted in Notion) — recreate once
-      headingId = await notion.createDateHeading(date); if (headingId) store.setDailyHeading(date, headingId);
-      blockId = await notion.addTodo(headingId, name);
+    // Look up (or create) the one heading for this date — avoids duplicate date blocks.
+    const headingId = await notion.ensureDateHeading(date);
+    if (headingId) {
+      store.setDailyHeading(date, headingId);
+      const blockId = await notion.addTodo(headingId, name);
+      if (blockId) store.setDailyItem(date, item.id, { notionBlockId: blockId });
     }
-    if (blockId) store.setDailyItem(date, item.id, { notionBlockId: blockId });
   }
   return store.getDailyDay(date);
 });
