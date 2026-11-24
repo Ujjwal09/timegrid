@@ -23,7 +23,7 @@ function escapeHtml(s) {
 let target = 8;
 let catMap = {};                        // topic -> category (remembered mapping)
 const catOf = t => (t ? (catMap[t] || t) : '');   // category of a specific topic
-let goalsView = 'D';
+let goalsView = 'W';
 let goalDates = [];          // Date (midnight) per column, earliest..today
 let goalSeries = [];         // [{ name, color, cum: [] }]
 let goalDayHours = [];       // total hours actually logged each day (all categories), aligned to goalDates
